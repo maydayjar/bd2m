@@ -1,0 +1,207 @@
+
+
+<form id="form"> 
+	<div>
+		<h3>Welcome, <span data-text-content="title">username</span></h3>
+		<input type="text" data-property-value="person.name" data-attribute-disabled="person.editable.name">
+		<input type="number" data-property-value="person.age" data-attribute-disabled="person.editable.age">
+	</div>
+</form>
+
+<script>
+function getAttributeBasedBindings(element) {
+	let result = {};
+
+	if (element.hasAttributes()) {
+		for(let i = element.attributes.length-1; i >= 0; i--) {
+			let name = element.attributes[i].name;
+			let value = element.attributes[i].value;
+			// Check path is unique
+			if (result[value]) throw new TypeError("Duplicated path " + path);
+
+			var attributePrefix = "data-";
+			var prefixBindAttribute = attributePrefix + "attribute-";
+			var prefixBindProperty = attributePrefix + "property-";
+			var prefixBindTextContent = attributePrefix + "text-content";
+
+			// Attribute binding
+			if (name.startsWith(prefixBindAttribute)) {
+				let targetAttributeName = name.replace(prefixBindAttribute, "");
+				result[value] = newElementAttributeHandler(element, targetAttributeName);
+			}
+			// Property binding
+			if (name.startsWith(prefixBindProperty)) {
+				let targetAttributeName = name.replace(prefixBindProperty, "");
+				result[value] = newElementPropertyHandler(element, targetAttributeName);
+			}
+			// Text content binding
+			if (name.startsWith(prefixBindTextContent)) {
+				result[value] = newElementTextContentHandler(element);
+			}
+		}
+	}
+	
+	for (var i = 0; i < element.children.length; i++) {
+		var child = element.children[i];
+		var childResult = getAttributeBasedBindings(child);
+		for (var path in childResult) {
+			if (result[path]) throw new TypeError("Duplicated path " + path);
+			result[path] = childResult[path];
+		}
+	}
+
+	return result;
+}
+
+
+function attributeHandler(attributeName) {
+	return {
+		get(element, path) {
+			return element.getAttribute(attributeName);
+		}
+		,
+		set(value) {
+			element.setAttribute(attributeName, value);
+		}
+		,
+		deletePropery() {
+			element.removeAttribute(attributeName);
+		}
+		,
+		has() {
+			return element.hasAttribute(attributeName);
+		}
+	}
+}
+
+
+function newElementAttributeHandler(element, attributeName) {
+	return {
+		get(element) {
+			return element.getAttribute(attributeName);
+		}
+		,
+		set(value) {
+			element.setAttribute(attributeName, value);
+		}
+		,
+		deletePropery() {
+			element.removeAttribute(attributeName);
+		}
+		,
+		has() {
+			return element.hasAttribute(attributeName);
+		}
+	}
+}
+
+function newElementPropertyHandler(element, propertyName) {
+	return {
+		get() {
+			return element[propertyName];
+		}
+		,
+		set(value) {
+			element[propertyName] = value;
+		}
+		,
+		deletePropery() {
+			throw new TypeError("Not yet implemented");
+		}
+		,
+		has() {
+			
+		}
+	}
+}
+
+
+function newElementTextContentHandler(element) {
+	return {
+		get() {
+			return element.textContent;
+		}
+		,
+		set(value) {
+			element.textContent = value;
+		}
+		,
+		deletePropery() {
+			element.textContent = null;
+		}
+		,
+		has() {
+			return (element.textContent != null);
+		}
+	}
+}
+
+
+function newElementProxy(element) {
+
+	let bindings = getAttributeBasedBindings(element);
+
+	function newProxy(bindings) {
+
+		if (!bindings) return undefined;
+	
+		function filterBindings(bindings, name) {
+			let result = undefined;
+			for (let rootPath in bindings) {
+				if (rootPath.startsWith(name + ".")) {
+					let path = rootPath.replace(name + ".", "");
+					if (path) {
+						if (!result) result = {};
+						result[path] = bindings[rootPath];
+					}
+				}
+			}
+			return result;
+		}
+
+		let handler = {
+			get: function(target, name) {
+				let binding = bindings[name];
+				if (binding) {
+					// Terminal binding
+					let result = binding.get();
+					if (target[name]) {
+						let value = target[name];
+						if (typeof value == "number") return Number(result);
+						if (typeof value == "string") return String(result);
+						if (typeof value == "boolean") return Boolean(result);
+						if (typeof value == "function") return Function(result);
+
+					} else {
+						return result;						
+					}
+				} else if (target[name]) {
+					// Preserved proxy object or plain value
+					return target[name];
+				} else {
+					// Create new proxy
+					let result = newProxy(filterBindings(bindings, name));
+					let isResultEmpty = false;
+					if (isResultEmpty) 
+						return;
+					else
+						return result;
+				}
+	    		},
+			set: function(target, name, value) {
+				let binding = bindings[name];
+				if (binding) {
+					binding.set(value);
+				};
+				target[name] = value;
+	    		}
+		}
+
+		return new Proxy({}, handler); 
+	}
+
+	return newProxy(bindings);
+}
+
+
+</script>

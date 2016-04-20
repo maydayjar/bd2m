@@ -1,0 +1,775 @@
+<html >
+<head>
+<meta charset="utf-8">
+</head>
+<body>
+<!-- Simple form -->
+<div id="form"> 
+	<div>
+		<h3>Welcome, <span>username</span> </h3>
+		<input type="text">
+		<input type="number">
+	</div>
+
+	<template id="date-of-birth">
+		<input type="date" name="birthday">
+	</template>
+
+	<template id="education">
+		<select name="university" style="background-color:#F00">
+			<option name="gravard">Garvard</option>
+			<option name="oxford">Oxford</option>
+		</select>
+	</template>
+
+	<select size="3" multiple name="cities[]">
+		<option disabled>Choose your cities</option>
+		<template id="cities">
+			<!-- Template will overwrite initial values if necessary-->
+			<option>City name</option>
+		</template>
+		<!-- Initial values -->
+		<option value="NY">New York</option>
+		<option value="Msk">Moscow</option>
+	</select>
+
+	<button class="btn save">Save</button>
+	<button class="btn reset">Reset</button>
+
+</div>
+<script>
+
+/*
+Basic property handler class.
+It is similar to the proxy handler except it describes some single property of the target object.
+*/
+class PropertyHandler {
+	get(target) { throw "Not implemented"; }
+	set(target,value) { throw "Not implemented"; }
+	deleteProperty(target) { throw "Not implemented"; }
+	has(target) { throw "Not implemented"; }
+}
+
+/*Provides proxies for representing property as an object of primitive type*/
+class PrimitivePropertyHandler extends PropertyHandler {
+	asNumber() {
+		return new NumberPropertyHandlerProxy(this); 
+	}
+	asString() {
+		return new StringPropertyHandlerProxy(this); 
+	}
+	asBoolean() {
+		return new BooleanPropertyHandlerProxy(this); 
+	}
+}
+
+class PropertyHandlerProxy extends PropertyHandler {
+	constructor(handler) { super(); this.handler = handler; }
+	get(target) { return this.handler.get(target); }
+	set(target,value) { return this.handler.set(target, value); }
+	deleteProperty(target) { return this.handler.deleteProperty(target); }
+	has(target) { return this.handler.has(target); }
+}
+
+class NumberPropertyHandlerProxy extends PropertyHandlerProxy {
+	constructor(handler) { super(handler); }
+	get(target) { return Number(this.handler.get(target)); }
+	set(target,value) { return this.handler.set(target, Number(value)); }
+}
+
+class StringPropertyHandlerProxy extends PropertyHandlerProxy {
+	constructor(handler) { super(handler); }
+	get(target) { return String(this.handler.get(target)); }
+	set(target,value) { return this.handler.set(target, String(value)); }
+}
+
+class BooleanPropertyHandlerProxy extends PropertyHandlerProxy {
+	constructor(handler) { super(handler); }
+	get(target) { return Boolean(this.handler.get(target)); }
+	set(target,value) { return this.handler.set(target, Boolean(value)); }
+}
+
+class NonEnumerablePropertyHandlerProxy extends PropertyHandlerProxy {
+	constructor(handler) { super(handler); }
+	has(target) { return false; }
+}
+
+class PrimitivePropertyHandlerProxy extends PropertyHandlerProxy {
+	constructor(handler) { super(handler); }
+	nonEnumerable() {
+		return new NonEnumerablePropertyHandlerProxy(this.handler); 
+	}
+	asNumber() {
+		return new NumberPropertyHandlerProxy(this.handler); 
+	}
+	asString() {
+		return new StringPropertyHandlerProxy(this.handler); 
+	}
+	asBoolean() {
+		return new BooleanPropertyHandlerProxy(this.handler); 
+	}
+}
+
+class FunctionPropertyHandlerProxy extends PropertyHandlerProxy {
+	constructor(handler) { 
+		super(handler); 
+		this.isEnumerable = false;
+	}
+	set(target, value) {
+		if (value && typeof value === "function") {
+			this.handler.set(target, value);
+		} else {
+			throw "value must be a function";
+		}
+	}
+	has(target) {
+		if (this.isEnumerable) {
+			return this.handler.has(target);
+		} else {
+			return false;
+		}
+	}
+	nonEnumerable() {
+		this.isEnumerable = false;		
+		return this;
+	}
+	enumerable() {
+		this.isEnumerable = true;
+		return this
+	}
+}
+
+
+class StatefulPropertyHandlerProxy extends PropertyHandlerProxy {
+	constructor(clazz) { 
+		super(null);
+		this.clazz = clazz; 
+		this.arguments=[];
+		for (var i = 1; i < arguments.length; ++i) {
+			this.arguments[i-1] = arguments[i];
+		}
+		this.handlers = new Map();
+	}
+	newHandler() {
+		// Spread operator is still not supported by most browsers:
+		// return new this.clazz(... this.arguments);
+
+		let args = this.arguments;
+		let clazz = this.clazz;
+		if (!args || args.length === 0) return new clazz();
+		switch(args.length) {
+			case 1: return new clazz(args[0]);
+			case 2: return new clazz(args[0],args[1]);
+			case 3: return new clazz(args[0],args[1],args[2]);
+			case 4: return new clazz(args[0],args[1],args[2],args[3]);
+			case 5: return new clazz(args[0],args[1],args[2],args[3],args[4]);
+			case 6: return new clazz(args[0],args[1],args[2],args[3],args[4],args[5]);
+			case 7: return new clazz(args[0],args[1],args[2],args[3],args[4],args[5],args[6]);
+			case 8: return new clazz(args[0],args[1],args[2],args[3],args[4],args[5],args[6],args[7]);
+			case 9: return new clazz(args[0],args[1],args[2],args[3],args[4],args[5],args[6],args[7],args[8]);
+			case 10: return new clazz(args[0],args[1],args[2],args[3],args[4],args[5],args[6],args[7],args[8],args[9]);
+			default: throw "too many arguments... unsupported"
+		}
+	}
+	get(target) { 
+		if (this.handlers.has(target)) 
+			return this.handlers.get(target).get(target);
+		else
+			return undefined;
+	}
+	set(target,value) {
+		if (!this.handlers.has(target)) {
+			this.handlers.set(target, this.newHandler());
+		}
+		return this.handlers.get(target).set(target, value);
+	}
+	deleteProperty(target) {
+		if (this.handlers.has(target)) {
+			let handler = this.handlers.get(target);
+			this.handlers.delete(target);
+			return handler.deleteProperty(target);
+		} else {
+			return false;
+		}
+	}
+	has(target) {
+		if (this.handlers.has(target)) {
+			return this.handlers.get(target).has(target);
+		} else {
+			return false;
+		}		
+	}
+}
+
+class DOMSelectorPropertyHandlerProxy extends PropertyHandlerProxy {
+	constructor(handler, selector) { 
+		super(handler);
+		this.selector = selector;
+	}
+	query(target) {
+		if (!this.selector) {
+			return target;
+		} else {
+			if (target.matches(this.selector)) {
+				return target;
+			} else {
+				return target.querySelector(this.selector);
+			}
+		}
+	}
+	get(target) { 
+		return this.handler.get(this.query(target));
+	}
+	set(target,value) {
+		return this.handler.set(this.query(target), value);
+	}
+	deleteProperty(target) {
+		return this.handler.deleteProperty(this.query(target));
+	}
+	has(target) {
+		return this.handler.has(this.query(target));
+	}
+}
+
+
+function nthSibling(element, n) {
+	let result = element;
+	for (let i = 0; i < n; ++i) {
+		result = result.nextSibling();
+		if (!result) break;
+	}
+	return result;
+}
+
+
+class DOMElementHandler extends PropertyHandler {
+	constructor(selector) {
+		super();
+		this.selector = selector;
+	}
+	get(target) { 
+		return this.selector? target.querySelector(this.selector) : target ;
+	} 
+	set(target, value) {
+		if (this.selector && !value.matches(this.selector)) throw new "New element must match the selector: " + this.selector;
+		var oldChild = this.get(target);
+		var newChild = value;
+		oldChild.parentNode.replaceChild(newChild, oldChild);
+	}
+	deleteProperty(target) { 
+		target = this.get(target);
+		if (target) {	
+			target.remove();
+			return true;
+		} else {
+			return false;
+		}
+	}
+	has(target) { 
+		return this.get(target) != null; 
+	}
+	nonEnumerable() {
+		return new NonEnumerablePropertyHandlerProxy(this); 
+	}
+}
+
+
+class DOMAttributeHandler extends PrimitivePropertyHandler {
+	constructor(attributeName) {
+		super();
+		this.attributeName = attributeName;
+	}
+	get(target) { 
+		return target.getAttribute(this.attributeName); 
+	} 
+	set(target, value) { 
+		return target.setAttribute(this.attributeName, value); 
+	}
+	deleteProperty(target) { 
+		return target.removeAttribute(this.attributeName); 
+	}
+	has(target) { 
+		return target.hasAttribute(this.attributeName); 
+	}
+}
+
+class DOMTextContentHandler extends PrimitivePropertyHandler {
+	constructor() {
+		super();
+	}
+	get(target) { return target.textContent; }
+	set(target, value) { return target.textContent = value; }
+	deleteProperty(target) { target.textContent = null; }
+	has(target) { return target.textContent != null; }
+}
+
+class DOMPropertyHandler extends PrimitivePropertyHandler {
+	constructor(propertyName) {
+		super();
+		this.propertyName = propertyName;
+	}
+	get(target) { return target[this.propertyName]; }
+	set(target, value) { target[this.propertyName] = value; }
+	deleteProperty(target) { delete target[this.propertyName]; }
+	has(target) { return this.propertyName in target; }
+}
+
+/*
+class DOMEventListenerHandler extends PropertyHandler {
+	constructor(selector, type, useCapture) {
+		super();
+		this.selector = selector;
+		this.type = type;
+		this.useCapture = useCapture;
+		this.listeners = [];
+	}
+	get(target) {
+		var element = query(target, this.selector);
+		for (var i in this.listeners) {
+			if (element === this.listeners[i].element) {
+				return this.listeners[i].listener;
+			}
+		}
+	}
+	set(target, value) { 
+		this.deleteProperty(target);
+		var element = query(target, this.selector);
+		element.addEventListener(this.type, value, this.useCapture);
+		this.listeners.push({element:element, listener: value});
+	}
+	deleteProperty(target) { 
+		var element = query(target, this.selector);
+		for (var i in this.listeners) {
+			if (element === this.listeners[i].element) {
+				element.removeEventListener(this.type, this.listeners[i].listener, this.useCapture);						
+				this.listeners.splice(i, 1);
+				return true;
+			}
+		}
+	}
+	has(target) {
+		var element = query(target, this.selector);
+		for (var i in this.listeners) {
+			if (element === this.listeners[i].element) {
+				return true;
+			}
+		}
+		return false;
+	}
+	asArray() { throw "not implemented";}
+}
+*/
+
+class DOMEventListenerHandler extends PropertyHandler {
+	constructor(type, useCapture) {
+		super();
+		this.type = type;
+		this.useCapture = useCapture;
+		this.listener = undefined;
+	}
+	get(target) {
+		return this.listener;
+	}
+	set(target, value) { 
+		this.deleteProperty(target);
+		this.listener = value;
+		target.addEventListener(this.type, this.listener, this.useCapture);
+	}
+	deleteProperty(target) { 
+		if (this.listener) {
+			target.removeEventListener(this.type, this.listener, this.useCapture);
+			this.listener = undefined;
+			return true;
+		} else {
+			return false;
+		}
+	}
+	has(target) {
+		return this.listener != undefined;
+	}
+}
+
+
+
+class TemplateHandler extends PropertyHandler {
+	constructor(descriptor) {
+		super();
+		this.descriptor = descriptor;
+		this.binding = undefined;
+		this.element = undefined;
+	}
+	get(target) { 
+		if (this.binding) {
+			return this.binding();
+		} else {
+			return undefined;
+		}
+	} 
+	set(target, value) {
+		let template = target;		
+		if (!this.binding) {
+			let templateElement = template.content.firstElementChild;
+			let newElement = templateElement.cloneNode(true);
+			template.parentNode.insertBefore(newElement, template);
+			this.binding = binding(newElement, this.descriptor);
+			this.element = newElement;
+		}
+		this.binding(value);
+	}
+	deleteProperty(target) { 
+		let template = target;		
+		if (this.binding) {
+			this.binding(undefined);
+			this.element.remove();
+			this.binding = undefined;
+			this.element = undefined;
+			return true;
+		} else {
+			return false;
+		}
+	}
+	has(target) {
+		if (!this.binding) return false;
+		if (!this.element) return false;
+		return true;
+	}
+}
+
+class ArrayBindingProxyHandler {
+	constructor(template,descriptor) {
+		super();
+		this.descriptor = descriptor;
+		this.elements = undefined;
+		this.proxy = undefined;
+		this.template = template;
+		// 
+	}
+	// Helper methods
+	cloneTemplate() {
+		return template.content.firstElementChild.cloneNode(true);
+	}
+	removeElements() {
+		if (this.elements) {
+			for (var i in this.elements) {
+				this.elements[i].remove();
+			}
+			this.elements = undefined;
+		}		
+	}
+	newElementAt(index) {
+		if (this.elements[name]) {
+			// Remove previous element
+			this.elements[name].remove();
+		}
+		let nextIndex = undefined;
+		let nextElement = undefined;
+		for (var i = name + 1; i < this.elements.length; ++i) {
+			if (this.elements[i]) {
+				nextIndex = i;
+				nextElement = this.elements[i];
+				break;
+			}
+		}
+		// Insert into the sequesce of elements
+		if (nextElement) {
+			nextElement.parentNode.insertBefore(this.cloneTemplate(),nextElement);
+		} else {
+			template.parentNode.insertBefore(this.cloneTemplate(), template);
+		}				
+	}
+	apply(target, thisArg, argumentsList) {
+		if (argumentsList.length) {
+			this.removeElements();
+			var value = argumentsList[0];
+			for (var p in value) {
+				this.set(target, p, value[p]);
+			}
+
+		} else {
+			return target;
+		}
+	}
+	// Proxy methods
+	get(target,name) {
+		if (name in target)
+			return target[name]();
+		else
+			return undefined;
+	}
+	set(target, name, value) {
+		if (name in target) {
+			target[name](value);
+		} else {
+			// Initialize elements container with appropriate value
+			if (!this.elements) {
+				if (typeof target === "object") this.elements = {};
+				if (typeof target === "array") this.elements = [];
+			}
+			// Create the binding
+			target[name] = binding(this.newElementAt(name), this.descriptor);	
+			target[name](value);
+		}
+	}
+	has(target, name) {
+		return name in target;
+	}
+	deleteProperty(target,name) {
+		if (this.elements[name]) {
+			this.elements.remove(name);
+		}
+		delete target[name];
+	}			
+
+}
+
+
+class TemplateArrayHandler extends PropertyHandler {
+	constructor(descriptor) {
+		super();
+		this.descriptor = descriptor;
+		this.value = undefined;
+	}
+	get(target) {
+		return this.value;
+	}
+	set(target, value) {
+		let template = target;
+		let descriptor = this.descriptor;
+
+		if (this.value) this.value({}); // Clean up the current value.
+
+		this.value = new 
+				
+		if (this.proxyHandler) {
+			this.proxyHandler.removeELements();
+		}
+
+
+		// Clean up existing elements
+		if (this.elements) {
+			for (var i in this.elements) {
+				this.elements[i].remove();
+			}
+			this.elements = undefined;
+			this.
+		}
+		this.proxy = null;
+		if (!value) return;
+
+		if (typeof value === "object") {
+			this.elements = {};
+			this.proxy = newProxy()
+		}
+		if (typeof value === "array") { 
+			this.elements = [];
+		}
+	}
+	deleteProperty(target) { 
+
+	}
+	has(target) {
+		if (!this.binding) return false;
+		if (!this.element) return false;
+		return true;
+	}
+}
+
+
+
+
+class ArrayOfDescriptorProxyHandler {
+	constructor(descriptor) {
+		this.template = template;
+		this.descriptor = descriptor;
+	}
+	newElement(name) {
+	}
+
+	get(target,name) {
+		if (name in target)
+			return descriptor;
+		else
+			return undefined;
+	}
+	set(target, name, value) {
+		
+		if (name in target) {
+			target[name](value);
+		} else {
+			target[name] = binding(newElement(name), that.descriptor);	
+			target[name](value);
+		}
+	}
+	has(target,name) {
+		return name in target;
+	}
+	deleteProperty(target,name) {
+	
+	}
+}
+
+/* Shorthand methods */
+function attribute(selector, attributeName) { return new PrimitivePropertyHandlerProxy(new DOMSelectorPropertyHandlerProxy(new DOMAttributeHandler(attributeName), selector)); }
+function textContent(selector) { return new PrimitivePropertyHandlerProxy(new DOMSelectorPropertyHandlerProxy(new DOMTextContentHandler(), selector)); }
+function property(selector, propertyName) { return new PrimitivePropertyHandlerProxy(new DOMSelectorPropertyHandlerProxy(new DOMPropertyHandler(propertyName), selector)); }
+function eventListener(selector, type, useCapture) { return new DOMSelectorPropertyHandlerProxy(new StatefulPropertyHandlerProxy(DOMEventListenerHandler, type, useCapture), selector); }
+function element(selector) { return new DOMElementHandler(selector); }
+function template(selector, descriptor) { return new DOMSelectorPropertyHandlerProxy(new StatefulPropertyHandlerProxy(TemplateHandler,descriptor), selector); }
+
+
+/* Main proxying method */
+function binding(element, descriptor) {
+	var result = new Proxy({}, {
+		apply(target, thisArg, argumentsList) {
+
+			if (argumentsList.length) {
+				var value = argumentsList[0];
+				// Make proxy callable
+				if (descriptor instanceof PropertyHandler) {
+					descriptor.set(element, value);
+				} else {
+					var argument = value;
+					for (var p in argument) {	
+						result[p] = argument[p];
+					}
+				}
+			} else {
+				if (descriptor instanceof PropertyHandler) {
+					// Return single accessor property
+					return descriptor.get(element);
+				} else {
+					// just return self (or return unproxied copy of self?)
+					return result;
+				}	
+			}
+		}
+		,
+		get(target, name) {
+			if (descriptor[name]) {
+				if (descriptor[name] instanceof PropertyHandler) {
+					// Terminal property
+					return descriptor[name].get(element);
+				} else {
+					if (name in target) {
+						return target[name];
+					} else {
+						return binding(element,descriptor[name]);
+					}
+				}				
+ 			} else {
+				return target[name];
+			}
+		}
+		,
+		set(target, name, value) {
+			if (descriptor[name]) {
+				if (descriptor[name] instanceof PropertyHandler) {
+					// Terminal property
+					if (typeof value === "function") {
+						// Use binding ???
+						descriptor[name].set(element, value.bind(result));
+					} else {
+						descriptor[name].set(element, value);
+					}
+					target[name]=value;
+				} else {
+					// Composite property
+					target[name] = binding(element,descriptor[name]);
+					for(var p in value) target[name][p]=value[p];
+				}				
+ 			}
+		}
+		,
+		has(target,name) {
+			if (descriptor[name] instanceof PropertyHandler) {
+				return descriptor[name].has(element);
+			} else {
+				return name in target;
+			}
+		}
+		,
+		deleteProperty(target,name) {
+			if (descriptor[name] instanceof PropertyHandler) {
+				// Terminal property
+				descriptor[name].deleteProperty(element);
+			} else {
+				// Delete recursively
+				for (p in target[name]) {
+					delete target[name][p];
+				}
+			}
+			delete target[name];
+		}
+	});
+	return result;	
+}
+</script>
+
+</body>
+
+<script>
+
+// Person descriptor
+var Person = 
+{
+	"title": 		textContent("div>h3>span"),
+	"person": {
+		"name": 	property("input[type=text]", "value"),
+		"age": 		property("input[type=number]","value").asNumber(),
+	},
+	"onChangeName": 	eventListener("input[type=text]", "keyup"),
+	"save": 		eventListener("button.save", "click"),
+	"reset": 		eventListener("button.reset", "click"),
+	"education": 		template("#education", property("select[name=university]", "value"))
+
+/*
+	"city": 		property("select [name=cities]", "value").asArray()
+	// Just show or hide template content if cities is defined and not null
+	"cities": 		template("#cities").asArray({"id": attribute("option","value"),"name": textContent("option")}),
+	// Array valus themself will be bound to the specified target 
+	"cities": 		template("#cities").asArray(textContent("option")),
+	// Create single object template with definitions
+	"birthday": 		template("#date-of-birth").property("input[type=date]","value"),
+	// Create single object template with definitions
+	"education": 		template("#education").asObject({
+		"university":	property("select[name=university]", "value"),
+		"graduated":	property("input[name=graduated]", "value")
+	}),		
+	// some fucking handler
+	"save":			eventHandler("button","click").asArray()
+*/
+}
+
+
+
+//person.cities=[{id:"MSK", name:"Moscow"}];	// Set up as arrays
+//person.cities={"msk":{id:"MSK", name:"Moscow"}};	// Set up as object
+//person.cities={"msk":"Moscow","ny":"New York"};	// Set up as object
+//person.cities=["Moscow","New York"];	// Set up as plain aray. Same
+
+
+var root = document.querySelector("#form");
+var proxy = binding(root, Person);
+proxy({
+	title: "Добро пожаловать!"
+	,
+	person: {
+		name:"Иван"
+	}
+	,
+	save: function() {
+		alert("Сохранение... " + this.person.name)
+	}
+	,
+	reset: function() {
+		this({title:null,person:{name:null}});
+	}
+	,
+	onChangeName: function() {
+		this.title = this.person.name;
+	}
+});
+
+</script>
+
+</html>

@@ -1,0 +1,34 @@
+
+- All paths are relative to their nearest scope
+- Attribute based bindings: 
+	- Advantages:
+		- Need no distinguishing between bindings and regular values
+		- Allows initial state specification
+		- Does not allow putting several bindings into element's content since attributes can not be duplicated
+		? Default binding for various elements with 'data-binding' attribute
+
+	- Disadvantages:
+		- Verbose
+- Template scope can be both relative and absoulte? No it can not. Example: select template. every option is unique element in the dom
+
+- Template
+	- data-binding=".property". If property is undefined or its value is null or undefined all next siblings with the property binding are removed. 
+	- data-binding="key in .property". Iterate over object keys. Data type of the property is object by default (but array can be assigned)
+	- data-binding="key of .property". Iterate over object values. Data type of the property is array by default (of operator is illegal for objects. can object be assigned in this case?)
+	- Deletion of a property will cause corresponding template element to be removed from the DOM. 
+
+- Whe dont's need square brackets in paths declarations. This simplifies bndings lookup and templates generation.
+
+
+? Path may include several levels. This allows grouping of elements. Setting null to the path's root will remove all the bindings from the dom at once. Or may be it just make the root property not enumerable but still allows it's reads.
+? What is difference between undefined property, undefined/null value and empty object/array value
+? What should be used for template arrays if they were preconfigured? Object or array?
+? When element with binding is removed from the DOM should the model immediately track that. Probably yes.
+? What is a template without the scope
+? It is necessary to store raw copy of the model for: 
+	- Generated elements 
+	- track changes after the last assignment
+
+? Shell we remember the last assigned type in the accessors and convert the result to that type?
+
+
