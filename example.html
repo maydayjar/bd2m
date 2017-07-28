@@ -1,0 +1,206 @@
+<html>
+<head>
+<meta charset="utf-8" />
+<script src="https://unpkg.com/babel-standalone@6/babel.min.js" charset="utf-8"></script>
+</head>
+<body>
+
+<!-- Simple form -->
+<div id="form"> 
+	<div>
+		<h3>Welcome, <span>username</span> </h3>
+		<input type="text">
+		<input type="number">
+	</div>
+
+	<template id="date-of-birth">
+		<input type="date" name="birthday">
+	</template>
+
+	<template id="education">
+		<select name="university" style="background-color:#F00">
+			<option name="gravard">Garvard</option>
+			<option name="oxford">Oxford</option>
+		</select>
+	</template>
+
+	
+	<select size="3" multiple name="cities[]" hidden>
+		<option disabled>Choose your cities</option>
+		<template id="cities">
+			<!-- Template will overwrite initial values if necessary-->
+			<option>City name</option>
+		</template>
+		<!-- Initial values -->
+		<option value="NY">New York</option>
+		<option value="Msk">Moscow</option>
+	</select>
+
+	<button class="btn save">Save</button>
+	<button class="btn reset">Reset</button>
+
+</div>
+
+
+<script type="text/babel" data-presets="es2017,stage-2" data-plugins="transform-decorators-legacy, transform-class-properties" charset="utf-8">
+
+function getBinding(object) {
+	if (object.__binding) {
+		var root = object.__binding.element ? object.__binding.element : document;
+		if (object.__binding.selector) {
+			return root.querySelector(object.__binding.selector);
+		} else {
+			return root;
+		}
+	} else {
+		return undefined;
+	}
+} 
+
+function Selector(selector) {
+	return function(target, name, descriptor) {
+		var originalValue[]
+		return {
+			configurable: true,
+			enumerable: true,
+			get: function () {
+				if (descriptor.get) {
+					return descriptor.get.apply(target);
+				}
+				let element = document.querySelector(selector);
+				return element ? element.textContent : undefined;
+			},
+			set: function (value) {
+				let element = document.querySelector(selector);
+				if (element) {
+					element.textContent = value;
+				}
+			}
+		}
+	}
+}
+
+function TextContent(selector) {
+	return function(target, name, descriptor) {
+		return {
+			configurable: true,
+			enumerable: true,
+			get: function () {
+				let element = document.querySelector(selector);
+				return element ? element.textContent : undefined;
+			},
+			set: function (value) {
+				let element = document.querySelector(selector);
+				if (element) {
+					element.textContent = value;
+				}
+			}
+		}
+	}
+}
+
+function Property(selector, propertyName) {
+	return function(target, name, descriptor) {
+		console.log(descriptor);
+	
+		return {
+			configurable: true,
+			enumerable: true,
+			get: function () {
+				let element = document.querySelector(selector);
+				return element ? element[propertyName] : undefined;
+			},
+			set: function (value) {
+				let element = document.querySelector(selector);
+				if (element) {
+					element[propertyName] = value;
+				}
+			}
+		}
+	}
+}
+
+function EventListener(selector, type, useCapture) {
+	return function(target, name, descriptor) {		
+		let element = document.querySelector(selector);
+		if (element) {
+			let listener = target[name]; 				// original function
+			let listeners = [listener.bind(target)]; 	// bound function
+			element.addEventListener(type, listeners[0], useCapture);
+			return {
+				configurable: true,
+				enumerable: true,
+				get: function () {
+					return listener;
+				},
+				set: function (value) {
+					if (listeners[0]) {
+						element.removeEventListener(type, listeners[0], useCapture);
+					}
+					if (value) {
+						listeners[0] = value.bind(target);
+						element.addEventListener(type, listeners[0], useCapture);
+					} else {
+						listeners[0] = value;	
+					}
+				}
+			}			
+		} else {
+			return descriptor;
+		}		
+	}
+}
+</script>
+
+<script type="text/babel" data-presets="es2017,stage-2" data-plugins="transform-decorators-legacy, transform-class-properties" charset="utf-8">
+
+class MyForm {
+
+	@TextContent("div>h3>span")
+	title;
+
+	@Property("input[type=text]", "value")
+	name;
+
+	@Property("input[type=number]", "value")
+	age;
+
+	constructor() {
+		this.title = "???"
+		this.name = "?"
+		this.age = 100;
+	}
+	
+	@EventListener("input[type=text]", "keyup")
+	onChangeName() {
+		this.title = this.name;
+	}
+	
+	@EventListener("button.save", "click")
+	save() {
+		alert("Сохранение... " + this.person.name)
+	}
+	
+	@EventListener("button.reset", "click")
+	reset() {
+		this.title = "";
+		this.name = "";
+		this.age = 0;
+	} 
+}
+
+/*
+class App {
+	@Selector("#form") // Assotiates property with some unique element
+	form1;
+	@SelectorAll("#form") // Can be an array. 
+	form2;
+}
+*/
+
+var root = document.querySelector("#form");
+var myForm = new MyForm();
+
+</script>
+</body>
+</html>
